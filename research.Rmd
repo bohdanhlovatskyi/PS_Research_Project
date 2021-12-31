@@ -1,0 +1,142 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+options(repos = list(CRAN="http://cran.rstudio.com/"))
+```
+
+```{r}
+packages <- c("lmtest", "ggplot2", "ggfortify", "gridExtra")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+# Packages loading
+invisible(lapply(packages, library, character.only = TRUE))
+```
+
+The data comes from an online offering of the **Taylor Manifest Anxiety Scale**. At the end of the test users were asked if their answers were accurate and could be used for research, 76% said yes and have been published here.
+
+It consist of bunch of question that can have following values:
+- 1=True,
+- 2=False,
+- 0=not answered.
+
+Then those values have been summed up to form the **score** variable.
+
+Gender: 1=male, 2=female, 3=other; 0=none chosen
+Gge: entered as a free response (ages<14 have been removed).
+
+```{r}
+data <- read.csv("TMA/data.csv")
+data <- data[, c('score', 'age', 'gender')]
+data <- data[data$age < 100, ]
+
+summary(data)
+```
+
+## Does woman stress more than man?
+So, we will test following hypothesis:$H_0 : \mu_w = \mu_m$ vs $H_1 : \mu_w > \mu_m$.
+
+Let's prepare the data at first:
+```{r}
+woman <- data[data$gender == 2, ]
+man <- data[data$gender == 1, ]
+
+woman$veg <- 'woman'
+man$veg <- 'man'
+
+# and combine into your new data frame vegLengths
+scores <- rbind(woman, man)
+ggplot(scores, aes(score, fill = veg)) + geom_density(alpha = 0.2)
+```
+
+```{r}
+t.test(woman$score, y = man$score, alternative = c("g"), conf.level = 0.95)
+```
+As one cas easily see, mean level of stres, according to the Taylor Manifest Anxiety Scale is indeed higher when the respondend is a woman (this can be seen from means of x and y, as well as the p-value of the hypothesis test. This can also be seen from the pdfs of the score distributions).
+
+## Let's now build a regression model for the level of stress that depends on respondends' age
+
+```{r}
+meanScoreForAge <- aggregate( score ~ age, data, mean )
+```
+
+```{r}
+ggplot(data, aes(x = factor(age), y = score)) + 
+  stat_summary(fun = "mean") +
+  scale_x_discrete(guide = guide_axis(n.dodge=3))+
+  labs(title="Mean score of anxiety for each age, displayed in the survay")
+```
+
+```{r}
+lmScore = lm(score~age, data = meanScoreForAge)
+summary(lmScore)
+```
+```{r}
+plot(lmScore)
+```
+From the linear model diagnostic plots, one can see that though residuals are distributed almost normally, there are some scores that should be considered as outliers. For instance, from the last graph, one can see that one of the scores exceeds the Cook's distance bound thus can be seen as clear outlier. Moreover, from the scale-location plot, one can raise an assumption that the residuals are not distributed with constant variance. This can be tested by Breusch-Pagan test:
+
+```{r}
+bptest(lmScore)
+```
+
+Here we can see that p-value is below rejection region, so we can easily reject the null hypothesis that the homoscedasticity is present and conclude that the residuals are not distributed with equal variance (Breusch-Pagan test). This issue may invalidate inference when using the previously treated tools for hypothesis testing: we should be cautious when making statements about the significance of regression coefficients on the basis of  t-statistics as computed by summary() or confidence intervals produced by confint() if it is doubtful for the assumption of homoskedasticity to hold!
+
+Let's take the most influential points that are beyond Cook's distance and simply remove them so to get rid of outliers. Moreover, let's then try to use the weigthed least square approach so to minimise this influence of changing variance. 
+
+```{r}
+cooksd <- cooks.distance(lmScore)
+# influential row numbers
+influential <- as.numeric(names(cooksd)[(cooksd > (4/length(lmScore)))])
+cat("Influential points are the following: "); cat(influential); cat("\n")
+
+meanScoreForAge2 <- meanScoreForAge[-influential, ]
+
+lmScore = lm(score~age, data = meanScoreForAge2)
+summary(lmScore); autoplot(lmScore, mfrow = c(2, 2))
+```
+
+```{r}
+ggplot(data, aes(x = factor(age), y = score)) + 
+  stat_summary(fun = "mean") +
+  scale_x_discrete(guide = guide_axis(n.dodge=3)) +
+  labs(title="Mean score of anxiety for each age, displayed in the survay") +
+  geom_abline(slope = coef(lmScore)[["age"]], 
+              intercept = coef(lmScore)[["(Intercept)"]])
+```
+
+Now, let's try to use weigthed linear regression so to get better results.
+```{r}
+#define weights to use
+wt <- 1 / lm(abs(lmScore$residuals) ~ lmScore$fitted.values)$fitted.values^2
+
+#perform weighted least squares regression
+wls_model <- lm(score ~ age, data = meanScoreForAge2, weights=wt)
+summary(wls_model);
+```
+
+As one can see, this approach grealy increses the determination coefficient of the linear model (0.74 vs 0.58 at the very beginning).
+
+```{r}
+ggplot(meanScoreForAge, aes(x = factor(age), y = score)) + 
+  stat_summary(fun = "mean") +
+  scale_x_discrete(guide = guide_axis(n.dodge=3)) +
+  labs(title="Mean score of anxiety for each age, displayed in the survay") +
+  geom_abline(slope = coef(wls_model)[["age"]], 
+              intercept = coef(wls_model)[["(Intercept)"]]) +
+  geom_point(data=meanScoreForAge[influential, ], aes(x=factor(age), y=score), colour="red", size=3)
+```
+
+## Conclusion
+As conclusion, one might state that indeed
+- average woman has greater level of stress in comparisson to an average man
+- there is a clear trend in stress level reduction that correspond to greater age of an respondent. 
+
