@@ -56,11 +56,11 @@ man$veg <- 'man'
 scores <- rbind(woman, man)
 ggplot(scores, aes(score, fill = veg)) + geom_density(alpha = 0.2)
 ```
-
+We use t-test,because the variance of populations is unknown.
 ```{r}
 t.test(woman$score, y = man$score, alternative = c("g"), conf.level = 0.95)
 ```
-As one cas easily see, mean level of stres, according to the Taylor Manifest Anxiety Scale is indeed higher when the respondend is a woman (this can be seen from means of x and y, as well as the p-value of the hypothesis test. This can also be seen from the pdfs of the score distributions).
+As one can easily see, mean level of stress, according to the Taylor Manifest Anxiety Scale is indeed higher when the respondent is a woman (this can be seen from means of x and y, as well as the p-value of the hypothesis test. This can also be seen from the pdfs of the score distributions).
 
 ## Let's now build a regression model for the level of stress that depends on respondends' age
 
@@ -90,7 +90,7 @@ bptest(lmScore)
 
 Here we can see that p-value is below rejection region, so we can easily reject the null hypothesis that the homoscedasticity is present and conclude that the residuals are not distributed with equal variance (Breusch-Pagan test). This issue may invalidate inference when using the previously treated tools for hypothesis testing: we should be cautious when making statements about the significance of regression coefficients on the basis of  t-statistics as computed by summary() or confidence intervals produced by confint() if it is doubtful for the assumption of homoskedasticity to hold!
 
-Let's take the most influential points that are beyond Cook's distance and simply remove them so to get rid of outliers. Moreover, let's then try to use the weigthed least square approach so to minimise this influence of changing variance. 
+Let's take the most influential points that are beyond Cook's distance and simply remove them so to get rid of outliers. Moreover, let's then try to use the weighted least square approach so to minimise this influence of changing variance. 
 
 ```{r}
 cooksd <- cooks.distance(lmScore)
@@ -113,7 +113,7 @@ ggplot(data, aes(x = factor(age), y = score)) +
               intercept = coef(lmScore)[["(Intercept)"]])
 ```
 
-Now, let's try to use weigthed linear regression so to get better results.
+Now, let's try to use weighted linear regression so to get better results.
 ```{r}
 #define weights to use
 wt <- 1 / lm(abs(lmScore$residuals) ~ lmScore$fitted.values)$fitted.values^2
@@ -123,7 +123,7 @@ wls_model <- lm(score ~ age, data = meanScoreForAge2, weights=wt)
 summary(wls_model);
 ```
 
-As one can see, this approach grealy increses the determination coefficient of the linear model (0.74 vs 0.58 at the very beginning).
+As one can see, this approach greatly increases the determination coefficient of the linear model (0.74 vs 0.58 at the very beginning).
 
 ```{r}
 ggplot(meanScoreForAge, aes(x = factor(age), y = score)) + 
@@ -137,6 +137,6 @@ ggplot(meanScoreForAge, aes(x = factor(age), y = score)) +
 
 ## Conclusion
 As conclusion, one might state that indeed
-- average woman has greater level of stress in comparisson to an average man
-- there is a clear trend in stress level reduction that correspond to greater age of an respondent. 
+- average woman has greater level of stress in comparison to an average man (we can conclude this because the p-value calculated by using t-test is big enough). So take care of your mother, sister, wife, girlfriend, etc.
+- there is a clear trend in stress level reduction that correspond to greater age of an respondent (we can see it from our regression line). We also assume that the last is because adults don't have to pass exams every 6 month.
 
